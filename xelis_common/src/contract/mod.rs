@@ -9,11 +9,11 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet}
 };
 use anyhow::Context as AnyhowContext;
-use better_any::Tid;
 use indexmap::IndexMap;
 use log::{debug, info};
 use xelis_builder::EnvironmentBuilder;
 use xelis_vm::{
+    Tid,
     Context,
     FnInstance,
     FnParams,
@@ -109,7 +109,7 @@ pub struct ContractEventTracker {
 }
 
 // Build the environment for the contract
-pub fn build_environment<P: ContractProvider>() -> EnvironmentBuilder<'static> {
+pub fn build_environment<'a, P: ContractProvider + Tid<'a>>() -> EnvironmentBuilder<'a> {
     debug!("Building environment for contract");
 
     let mut env = EnvironmentBuilder::default();
@@ -911,23 +911,21 @@ pub fn build_environment<P: ContractProvider>() -> EnvironmentBuilder<'static> {
     env
 }
 
-pub fn provider_from_context<'a, 'ty, 'r, P: ContractProvider>(context: &'a mut Context<'ty, 'r>) -> Result<&'a mut P, anyhow::Error> {
-    let data: &mut ContractProviderWrapper<P> = context.get_mut()
+pub fn provider_from_context<'a, 'ty, P: ContractProvider + Tid<'ty>>(context: &'a mut Context<'ty, '_>) -> Result<&'a mut P, anyhow::Error> {
+    let data: &mut P = context.get_mut()
         .context("Provider not initialized")?;
 
-    Ok(data.0)
+    Ok(data)
 }
 
-pub fn from_context<'a, 'ty, 'r, P: ContractProvider>(context: &'a mut Context<'ty, 'r>) -> Result<(&'a mut P, &'a mut ChainState<'ty>), anyhow::Error> {
-    let mut datas = context.get_many_mut([&ContractProviderWrapper::<P>::id(), &TypeId::of::<ChainState>()]);
+pub fn from_context<'a, 'ty, P: Tid<'ty>>(context: &'a mut Context<'ty, '_>) -> Result<(&'a mut P, &'a mut ChainState<'ty>), anyhow::Error> {
+    let mut datas = context.get_many_mut([&P::id(), &TypeId::of::<ChainState>()]);
 
-    let wrapper: &mut ContractProviderWrapper<P> = datas[0]
+    let provider: &mut P = datas[0]
         .take()
         .context("Contract Environment is not initialized")?
         .downcast_mut()
         .context("Contract Environment is not initialized correctly")?;
-
-    let provider: &mut P = wrapper.0;
 
     let state: &mut ChainState = datas[1]
         .take()
@@ -1059,7 +1057,7 @@ fn get_deposit_for_asset(_: FnInstance, params: FnParams, context: &mut Context)
     Ok(Some(value))
 }
 
-fn get_balance_for_asset<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+fn get_balance_for_asset<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (provider, state) = from_context::<P>(context)?;
 
     let asset: Hash = params.remove(0)
@@ -1073,7 +1071,7 @@ fn get_balance_for_asset<P: ContractProvider>(_: FnInstance, mut params: FnParam
     Ok(Some(balance))
 }
 
-fn transfer<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+fn transfer<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     debug!("Transfer called {:?}", params);
 
     let asset: Hash = params.remove(2)
@@ -1133,7 +1131,7 @@ fn transfer<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &
     Ok(Some(Primitive::Boolean(true).into()))
 }
 
-fn burn<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+fn burn<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (provider, state) = from_context::<P>(context)?;
 
     let asset: Hash = params.remove(1)
@@ -1165,7 +1163,7 @@ fn burn<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut 
     Ok(Some(Primitive::Boolean(true).into()))
 }
 
-fn get_account_balance_of<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+fn get_account_balance_of<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (provider, state) = from_context::<P>(context)?;
 
     let asset: Hash = params.remove(1)
@@ -1189,4 +1187,39 @@ fn get_account_balance_of<P: ContractProvider>(_: FnInstance, mut params: FnPara
 fn get_gas_usage(_: FnInstance, _: FnParams, context: &mut Context) -> FnReturnType {
     let gas = context.current_gas_usage();
     Ok(Some(Primitive::U64(gas).into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use xelis_builder::EnvironmentBuilder;
+    use xelis_vm::{Context, FnInstance, FnParams, FnReturnType};
+
+    trait Foo {}
+
+    struct FooImpl;
+
+    impl Foo for FooImpl {}
+
+    fn bar<'ty, F: Foo + 'ty>(_: FnInstance, _: FnParams, _: &mut Context<'ty, '_>) -> FnReturnType {
+        Ok(None)
+    }
+
+    fn build_env<'ty, F: Foo + 'ty>() -> EnvironmentBuilder<'ty> {
+        let mut env = EnvironmentBuilder::default();
+        env.register_native_function(
+            "bar",
+            None,
+            vec![],
+            bar::<F>,
+            1000,
+            None
+        );
+
+        env
+    }
+
+    #[test]
+    fn test_context_lifetime() {
+        build_env::<FooImpl>();
+    }
 }

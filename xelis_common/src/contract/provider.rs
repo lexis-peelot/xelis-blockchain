@@ -1,5 +1,3 @@
-use xelis_vm::tid;
-
 use crate::{
     account::CiphertextCache,
     asset::AssetData,
@@ -9,7 +7,7 @@ use crate::{
 
 use super::ContractStorage;
 
-pub trait ContractProvider: ContractStorage + 'static {
+pub trait ContractProvider: ContractStorage {
     // Returns the balance of the contract
     fn get_contract_balance_for_asset(&self, contract: &Hash, asset: &Hash, topoheight: TopoHeight) -> Result<Option<(TopoHeight, u64)>, anyhow::Error>;
 
@@ -28,8 +26,3 @@ pub trait ContractProvider: ContractStorage + 'static {
     // Verify if the address is well registered
     fn account_exists(&self, key: &PublicKey, topoheight: TopoHeight) -> Result<bool, anyhow::Error>;
 }
-
-// This is a wrapper around the storage to allow for the storage to be passed in the Context
-pub struct ContractProviderWrapper<'a, S: ContractProvider>(pub &'a mut S);
-
-tid! { impl<'a, S: 'static> TidAble<'a> for ContractProviderWrapper<'a, S> where S: ContractProvider }

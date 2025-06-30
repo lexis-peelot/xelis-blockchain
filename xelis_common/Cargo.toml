@@ -9,9 +9,9 @@ build = "build.rs"
 
 [dependencies]
 xelis-hash = { git = "https://github.com/xelis-project/xelis-hash", branch = "master" }
-xelis-vm = { git = "https://github.com/xelis-project/xelis-vm", branch = "dev", features = ["logging"] }
-xelis-types = { git = "https://github.com/xelis-project/xelis-vm", branch = "dev" }
-xelis-builder = { git = "https://github.com/xelis-project/xelis-vm", branch = "dev" }
+xelis-vm = { git = "https://github.com/xelis-project/xelis-vm", branch = "lifetimes-rework", features = ["logging"] }
+xelis-types = { git = "https://github.com/xelis-project/xelis-vm", branch = "lifetimes-rework" }
+xelis-builder = { git = "https://github.com/xelis-project/xelis-vm", branch = "lifetimes-rework" }
 bulletproofs = { git = "https://github.com/xelis-project/bulletproofs", branch = "master", version = "5.0.2" }
 curve25519-dalek = { version = "4.1.1", features = ["digest", "group", "rand_core", "serde", "ecdlp"], git = "https://github.com/xelis-project/curve25519-dalek", branch = "master" }
 blake3 = "1.5.1"
@@ -55,7 +55,6 @@ serde_regex = "1.1.0"
 # Used for U256
 primitive-types = { version = "0.13.1", features = ["serde"] }
 chacha20 = "0.9.1"
-better_any = "0.2.0"
 log-panics = { version = "2", features = ["with-backtrace"]}
 cfg-if = "1.0.0"
 

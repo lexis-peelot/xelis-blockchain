@@ -8,6 +8,7 @@ use xelis_vm::{
     FnReturnType,
     OpaqueWrapper,
     Primitive,
+    Tid,
     ValueCell
 };
 use crate::{
@@ -52,7 +53,7 @@ pub fn storage(_: FnInstance, _: FnParams, _: &mut Context) -> FnReturnType {
     Ok(Some(Primitive::Opaque(OpaqueWrapper::new(OpaqueStorage)).into()))
 }
 
-pub fn storage_load<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+pub fn storage_load<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (storage, state) = from_context::<P>(context)?;
 
     let key = params.remove(0)
@@ -72,7 +73,7 @@ pub fn storage_load<P: ContractProvider>(_: FnInstance, mut params: FnParams, co
     Ok(Some(value.unwrap_or_default()))
 }
 
-pub fn storage_has<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+pub fn storage_has<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (storage, state) = from_context::<P>(context)?;
 
     let key = params.remove(0)
@@ -86,7 +87,7 @@ pub fn storage_has<P: ContractProvider>(_: FnInstance, mut params: FnParams, con
     Ok(Some(Primitive::Boolean(contains).into()))
 }
 
-pub fn storage_store<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+pub fn storage_store<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let key = params.remove(0)
         .into_owned()?;
 
@@ -130,7 +131,7 @@ pub fn storage_store<P: ContractProvider>(_: FnInstance, mut params: FnParams, c
     Ok(Some(value))
 }
 
-pub fn storage_delete<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+pub fn storage_delete<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (storage, state) = from_context::<P>(context)?;
 
     let key = params.remove(0)

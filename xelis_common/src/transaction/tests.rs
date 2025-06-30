@@ -55,14 +55,14 @@ struct AccountChainState {
 }
 
 #[derive(Debug, Clone)]
-struct ChainState {
+struct ChainState<'a> {
     accounts: HashMap<PublicKey, AccountChainState>,
     multisig: HashMap<PublicKey, MultiSigPayload>,
     contracts: HashMap<Hash, Module>,
-    env: Environment,
+    env: Environment<'a>,
 }
 
-impl ChainState {
+impl<'a> ChainState<'a> {
     fn new() -> Self {
         Self {
             accounts: HashMap::new(),
@@ -685,7 +685,7 @@ async fn test_multisig() {
 }
 
 #[async_trait]
-impl<'a> BlockchainVerificationState<'a, ()> for ChainState {
+impl<'a> BlockchainVerificationState<'a, ()> for ChainState<'a> {
 
     /// Pre-verify the TX
     async fn pre_verify_tx<'b>(
@@ -761,7 +761,7 @@ impl<'a> BlockchainVerificationState<'a, ()> for ChainState {
         Ok(self.multisig.get(account))
     }
 
-    async fn get_environment(&mut self) -> Result<&Environment, ()> {
+    async fn get_environment(&mut self) -> Result<&Environment<'a>, ()> {
         Ok(&self.env)
     }
 
@@ -784,7 +784,7 @@ impl<'a> BlockchainVerificationState<'a, ()> for ChainState {
     async fn get_contract_module_with_environment(
         &self,
         contract: &'a Hash
-    ) -> Result<(&Module, &Environment), ()> {
+    ) -> Result<(&Module, &Environment<'a>), ()> {
         let module = self.contracts.get(contract).ok_or(())?;
         Ok((module, &self.env))
     }
