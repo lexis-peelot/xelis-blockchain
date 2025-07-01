@@ -36,7 +36,7 @@ struct Account<'a> {
     multisig: Option<MultiSigPayload>
 }
 
-pub struct MempoolState<'a, S: Storage> {
+pub struct MempoolState<'a, 'ty: 'a, S: Storage> {
     // If the provider is mainnet or not
     mainnet: bool,
     // Mempool from which it's backed
@@ -44,7 +44,7 @@ pub struct MempoolState<'a, S: Storage> {
     // Storage in case sender balances aren't in mempool cache
     storage: &'a S,
     // Contract environment
-    environment: &'a Environment,
+    environment: &'a Environment<'ty>,
     // Receiver balances
     receiver_balances: HashMap<Cow<'a, PublicKey>, HashMap<Cow<'a, Hash>, Ciphertext>>,
     // Sender accounts
@@ -60,8 +60,8 @@ pub struct MempoolState<'a, S: Storage> {
     block_version: BlockVersion,
 }
 
-impl<'a, S: Storage> MempoolState<'a, S> {
-    pub fn new(mempool: &'a Mempool, storage: &'a S, environment: &'a Environment, stable_topoheight: TopoHeight, topoheight: TopoHeight, block_version: BlockVersion, mainnet: bool) -> Self {
+impl<'a, 'ty, S: Storage> MempoolState<'a, 'ty, S> {
+    pub fn new(mempool: &'a Mempool, storage: &'a S, environment: &'a Environment<'ty>, stable_topoheight: TopoHeight, topoheight: TopoHeight, block_version: BlockVersion, mainnet: bool) -> Self {
         Self {
             mainnet,
             mempool,
@@ -201,7 +201,7 @@ impl<'a, S: Storage> MempoolState<'a, S> {
 }
 
 #[async_trait]
-impl<'a, S: Storage> BlockchainVerificationState<'a, BlockchainError> for MempoolState<'a, S> {
+impl<'a, 'ty: 'a, S: Storage> BlockchainVerificationState<'a, 'ty, BlockchainError> for MempoolState<'a, 'ty, S> {
     /// Verify the TX version and reference
     async fn pre_verify_tx<'b>(
         &'b mut self,
@@ -290,7 +290,7 @@ impl<'a, S: Storage> BlockchainVerificationState<'a, BlockchainError> for Mempoo
     }
 
     /// Get the contract environment
-    async fn get_environment(&mut self) -> Result<&Environment, BlockchainError> {
+    async fn get_environment(&mut self) -> Result<&Environment<'ty>, BlockchainError> {
         Ok(self.environment)
     }
 
@@ -329,7 +329,7 @@ impl<'a, S: Storage> BlockchainVerificationState<'a, BlockchainError> for Mempoo
     async fn get_contract_module_with_environment(
         &self,
         hash: &'a Hash
-    ) -> Result<(&Module, &Environment), BlockchainError> {
+    ) -> Result<(&Module, &Environment<'ty>), BlockchainError> {
         let module = self.contracts.get(hash)
             .ok_or_else(|| BlockchainError::ContractNotFound(hash.clone()))?;
 

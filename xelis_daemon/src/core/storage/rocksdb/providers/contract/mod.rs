@@ -18,7 +18,7 @@ use xelis_vm::ValueCell;
 use crate::core::storage::*;
 
 #[async_trait]
-impl ContractAccess for RocksStorage {
+impl<'ty> ContractAccess<'ty> for RocksStorage {
     fn get_contract_balance_for_asset(&self, contract: &Hash, asset: &Hash, topoheight: TopoHeight) -> Result<Option<(TopoHeight, u64)>, anyhow::Error> {
         trace!("get contract balance for contract {} asset {}", contract, asset);
         let res = try_block_on(self.get_contract_balance_at_maximum_topoheight(contract, asset, topoheight))??;

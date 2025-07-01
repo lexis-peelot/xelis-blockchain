@@ -8,8 +8,8 @@ authors = ["Slixe <slixeprivate@gmail.com>"]
 
 [dependencies]
 xelis_common = { path = "../xelis_common", features = ["prompt", "clap", "rpc_server", "tokio"] }
-xelis-environment = { git = "https://github.com/xelis-project/xelis-vm", branch = "dev" }
-xelis-vm = { git = "https://github.com/xelis-project/xelis-vm", branch = "dev" }
+xelis-environment = { git = "https://github.com/xelis-project/xelis-vm", branch = "lifetimes-rework" }
+xelis-vm = { git = "https://github.com/xelis-project/xelis-vm", branch = "lifetimes-rework" }
 
 # Database backends
 sled = "0.34.7"

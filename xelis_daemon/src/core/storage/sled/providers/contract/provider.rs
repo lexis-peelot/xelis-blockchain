@@ -53,7 +53,7 @@ impl ContractStorage for SledStorage {
     }
 }
 
-impl ContractProvider for SledStorage {
+impl<'ty> ContractProvider<'ty> for SledStorage {
     fn get_contract_balance_for_asset(&self, contract: &Hash, asset: &Hash, topoheight: TopoHeight) -> Result<Option<(TopoHeight, u64)>, anyhow::Error> {
         trace!("get contract balance for contract {} asset {}", contract, asset);
         let res = try_block_on(self.get_contract_balance_at_maximum_topoheight(contract, asset, topoheight))??;

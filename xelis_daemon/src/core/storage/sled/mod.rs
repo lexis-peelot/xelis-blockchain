@@ -4,6 +4,7 @@ mod providers;
 
 use async_trait::async_trait;
 use itertools::Either;
+use xelis_vm::tid;
 use crate::core::error::{BlockchainError, DiskContext};
 use xelis_common::{
     block::BlockHeader,
@@ -598,6 +599,8 @@ impl SledStorage {
         Ok(())
     }
 }
+
+tid!(SledStorage);
 
 #[async_trait]
 impl Storage for SledStorage {

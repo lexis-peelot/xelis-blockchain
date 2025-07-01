@@ -36,6 +36,7 @@ use xelis_common::{
     tokio,
     transaction::Transaction,
 };
+use xelis_vm::tid;
 use crate::core::{
     config::RocksDBConfig,
     error::{BlockchainError, DiskContext},
@@ -430,6 +431,8 @@ impl RocksStorage {
         Self::iter_keys_internal(&self.db, self.snapshot.as_ref(), mode, column)
     }
 }
+
+tid!(RocksStorage);
 
 #[async_trait]
 impl Storage for RocksStorage {

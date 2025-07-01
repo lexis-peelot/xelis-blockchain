@@ -98,7 +98,7 @@ pub trait BlockchainVerificationState<'a, 'ty: 'a, E> {
     ) -> Result<Option<&MultiSigPayload>, E>;
 
     /// Get the environment
-    async fn get_environment(&mut self) -> Result<&Environment<'a>, E>;
+    async fn get_environment(&mut self) -> Result<&Environment<'ty>, E>;
 
     /// Set the contract module
     async fn set_contract_module(
@@ -120,7 +120,7 @@ pub trait BlockchainVerificationState<'a, 'ty: 'a, E> {
     async fn get_contract_module_with_environment<'b>(
         &'b self,
         hash: &'a Hash
-    ) -> Result<(&'b Module, &'b Environment<'a>), E>;
+    ) -> Result<(&'b Module, &'b Environment<'ty>), E>;
 }
 
 pub struct ContractEnvironment<'a, 'ty, P: ContractProvider<'ty>> {

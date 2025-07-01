@@ -59,7 +59,7 @@ pub struct ApplicableChainState<'a, S: Storage> {
 }
 
 #[async_trait]
-impl<'a, S: Storage> BlockchainVerificationState<'a, BlockchainError> for ApplicableChainState<'a, S> {
+impl<'a, S: Storage> BlockchainVerificationState<'a, 'static, BlockchainError> for ApplicableChainState<'a, S> {
     /// Pre-verify the TX
     async fn pre_verify_tx<'b>(
         &'b mut self,
@@ -133,7 +133,7 @@ impl<'a, S: Storage> BlockchainVerificationState<'a, BlockchainError> for Applic
         self.inner.get_multisig_state(account).await
     }
 
-    async fn get_environment(&mut self) -> Result<&Environment, BlockchainError> {
+    async fn get_environment(&mut self) -> Result<&Environment<'static>, BlockchainError> {
         self.inner.get_environment().await
     }
 
@@ -155,13 +155,13 @@ impl<'a, S: Storage> BlockchainVerificationState<'a, BlockchainError> for Applic
     async fn get_contract_module_with_environment(
         &self,
         hash: &'a Hash
-    ) -> Result<(&xelis_vm::Module, &Environment), BlockchainError> {
+    ) -> Result<(&xelis_vm::Module, &Environment<'static>), BlockchainError> {
         self.inner.get_contract_module_with_environment(hash).await
     }
 }
 
 #[async_trait]
-impl<'a, S: Storage> BlockchainApplyState<'a, S, BlockchainError> for ApplicableChainState<'a, S> {
+impl<'a, S: Storage> BlockchainApplyState<'a, 'static, S, BlockchainError> for ApplicableChainState<'a, S> {
     /// Track burned supply
     async fn add_burned_coins(&mut self, amount: u64) -> Result<(), BlockchainError> {
         self.burned_supply += amount;
@@ -203,7 +203,7 @@ impl<'a, S: Storage> BlockchainApplyState<'a, S, BlockchainError> for Applicable
         Ok(())
     }
 
-    async fn get_contract_environment_for<'b>(&'b mut self, contract: &'b Hash, deposits: &'b IndexMap<Hash, ContractDeposit>, tx_hash: &'b Hash) -> Result<(ContractEnvironment<'b, S>, ContractChainState<'b>), BlockchainError> {
+    async fn get_contract_environment_for<'b>(&'b mut self, contract: &'b Hash, deposits: &'b IndexMap<Hash, ContractDeposit>, tx_hash: &'b Hash) -> Result<(ContractEnvironment<'b, 'static, S>, ContractChainState<'b>), BlockchainError> {
         // Find the contract module in our cache
         // We don't use the function `get_contract_module_with_environment` because we need to return the mutable storage
         let module = self.inner.contracts.get(contract)
@@ -336,7 +336,7 @@ impl<'a, S: Storage> AsMut<ChainState<'a, S>> for ApplicableChainState<'a, S> {
 impl<'a, S: Storage> ApplicableChainState<'a, S> {
     pub fn new(
         storage: &'a mut S,
-        environment: &'a Environment,
+        environment: &'a Environment<'static>,
         stable_topoheight: TopoHeight,
         topoheight: TopoHeight,
         block_version: BlockVersion,
