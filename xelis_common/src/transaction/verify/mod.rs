@@ -399,7 +399,7 @@ impl Transaction {
         Ok(())
     }
 
-    async fn verify_dynamic_parts<'a, E, B: BlockchainVerificationState<'a, E>>(
+    async fn verify_dynamic_parts<'a, 'ty: 'a, E, B: BlockchainVerificationState<'a, 'ty, E>>(
         &'a self,
         tx_hash: &'a Hash,
         state: &mut B,
@@ -549,7 +549,7 @@ impl Transaction {
 
     // internal, does not verify the range proof
     // returns (transcript, commitments for range proof)
-    async fn pre_verify<'a, E, B: BlockchainVerificationState<'a, E>>(
+    async fn pre_verify<'a, 'ty: 'a, E, B: BlockchainVerificationState<'a, 'ty, E>>(
         &'a self,
         tx_hash: &'a Hash,
         state: &mut B,
@@ -963,14 +963,14 @@ impl Transaction {
         Ok((transcript, final_commitments))
     }
 
-    pub async fn verify_batch<'a, H, E, B, C>(
+    pub async fn verify_batch<'a, 'ty: 'a, H, E, B, C>(
         txs: impl Iterator<Item = &'a (Arc<Transaction>, H)>,
         state: &mut B,
         cache: &C,
     ) -> Result<(), VerificationError<E>>
     where
         H: AsRef<Hash> + 'a,
-        B: BlockchainVerificationState<'a, E>,
+        B: BlockchainVerificationState<'a, 'ty, E>,
         C: ZKPCache<E>
     {
         trace!("Verifying batch of transactions");
@@ -1027,14 +1027,14 @@ impl Transaction {
     }
 
     /// Verify one transaction. Use `verify_batch` to verify a batch of transactions.
-    pub async fn verify<'a, E, B, C>(
+    pub async fn verify<'a, 'ty: 'a, E, B, C>(
         self: &'a Arc<Self>,
         tx_hash: &'a Hash,
         state: &mut B,
         cache: &C,
     ) -> Result<(), VerificationError<E>>
     where
-        B: BlockchainVerificationState<'a, E>,
+        B: BlockchainVerificationState<'a, 'ty, E>,
         C: ZKPCache<E>
     {
         let mut sigma_batch_collector = BatchCollector::default();
@@ -1078,7 +1078,7 @@ impl Transaction {
 
     // Apply the transaction to the state
     // Arc is required around Self to be shared easily into the VM if needed
-    async fn apply<'a, P: ContractProvider, E, B: BlockchainApplyState<'a, P, E>>(
+    async fn apply<'a, 'ty: 'a, P: ContractProvider<'ty>, E, B: BlockchainApplyState<'a, 'ty, P, E>>(
         self: &'a Arc<Self>,
         tx_hash: &'a Hash,
         state: &mut B,
@@ -1169,7 +1169,7 @@ impl Transaction {
     }
 
     /// Assume the tx is valid, apply it to `state`. May panic if a ciphertext is ill-formed.
-    pub async fn apply_without_verify<'a, P: ContractProvider, E, B: BlockchainApplyState<'a, P, E>>(
+    pub async fn apply_without_verify<'a, 'ty: 'a, P: ContractProvider<'ty>, E, B: BlockchainApplyState<'a, 'ty, P, E>>(
         self: &'a Arc<Self>,
         tx_hash: &'a Hash,
         state: &mut B,
@@ -1236,7 +1236,7 @@ impl Transaction {
     /// Verify only that the final sender balance is the expected one for each commitment
     /// Then apply ciphertexts to the state
     /// Checks done are: commitment eq proofs only
-    pub async fn apply_with_partial_verify<'a, P: ContractProvider, E, B: BlockchainApplyState<'a, P, E>>(
+    pub async fn apply_with_partial_verify<'a, 'ty: 'a, P: ContractProvider<'ty>, E, B: BlockchainApplyState<'a, 'ty, P, E>>(
         self: &'a Arc<Self>,
         tx_hash: &'a Hash,
         state: &mut B

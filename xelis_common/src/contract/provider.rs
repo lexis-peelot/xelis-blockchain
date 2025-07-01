@@ -1,3 +1,5 @@
+use xelis_vm::Tid;
+
 use crate::{
     account::CiphertextCache,
     asset::AssetData,
@@ -7,7 +9,7 @@ use crate::{
 
 use super::ContractStorage;
 
-pub trait ContractProvider: ContractStorage {
+pub trait ContractProvider<'ty>: ContractStorage + Tid<'ty> {
     // Returns the balance of the contract
     fn get_contract_balance_for_asset(&self, contract: &Hash, asset: &Hash, topoheight: TopoHeight) -> Result<Option<(TopoHeight, u64)>, anyhow::Error>;
 

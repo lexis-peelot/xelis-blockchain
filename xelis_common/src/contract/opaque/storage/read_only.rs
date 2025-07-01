@@ -5,8 +5,7 @@ use xelis_vm::{
     FnParams,
     FnReturnType,
     OpaqueWrapper,
-    Primitive,
-    Tid
+    Primitive
 };
 use crate::{
     contract::{from_context, ContractProvider},
@@ -20,7 +19,7 @@ impl JSONHelper for OpaqueReadOnlyStorage {}
 
 impl Serializable for OpaqueReadOnlyStorage {}
 
-pub fn read_only_storage<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+pub fn read_only_storage<'ty, P: ContractProvider<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (storage, state) = from_context::<P>(context)?;
     let hash: Hash = params.remove(0)
         .into_owned()?
@@ -33,7 +32,7 @@ pub fn read_only_storage<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut
     Ok(Some(Primitive::Opaque(OpaqueWrapper::new(OpaqueReadOnlyStorage(hash))).into()))
 }
 
-pub fn read_only_storage_load<'ty, P: ContractProvider + Tid<'ty>>(zelf: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+pub fn read_only_storage_load<'ty, P: ContractProvider<'ty>>(zelf: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (storage, state) = from_context::<P>(context)?;
     let zelf: &OpaqueReadOnlyStorage = zelf?
         .as_opaque_type()?;
@@ -53,7 +52,7 @@ pub fn read_only_storage_load<'ty, P: ContractProvider + Tid<'ty>>(zelf: FnInsta
     Ok(Some(value.unwrap_or_default()))
 }
 
-pub fn read_only_storage_has<'ty, P: ContractProvider + Tid<'ty>>(zelf: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+pub fn read_only_storage_has<'ty, P: ContractProvider<'ty>>(zelf: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (storage, state) = from_context::<P>(context)?;
     let zelf: &OpaqueReadOnlyStorage = zelf?
         .as_opaque_type()?;

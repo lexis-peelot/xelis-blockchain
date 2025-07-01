@@ -6,7 +6,6 @@ use xelis_vm::{
     FnParams,
     FnReturnType,
     Primitive,
-    Tid,
 };
 use crate::{
     asset::{AssetData, AssetOwner},
@@ -44,7 +43,7 @@ fn is_valid_char_for_asset(c: char, whitespace: bool, uppercase_only: bool) -> b
 
 // Create a new asset
 // Return None if the asset already exists
-pub fn asset_create<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+pub fn asset_create<'ty, P: ContractProvider<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (provider, chain_state) = from_context::<P>(context)?;
 
     let max_supply = match params.remove(4).into_owned()?.take_as_optional()? {
@@ -116,7 +115,7 @@ pub fn asset_create<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut para
     Ok(Some(Primitive::Opaque(asset.into()).into()))
 }
 
-pub fn asset_get_by_id<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+pub fn asset_get_by_id<'ty, P: ContractProvider<'ty>>(_: FnInstance, params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let id = params[0].as_u64()?;
     let (provider, chain_state) = from_context::<P>(context)?;
 
@@ -135,7 +134,7 @@ pub fn asset_get_by_id<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, param
     Ok(Some(Primitive::Opaque(asset.into()).into()))
 }
 
-pub fn asset_get_by_hash<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+pub fn asset_get_by_hash<'ty, P: ContractProvider<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let hash: Hash = params.remove(0)
         .into_owned()?
         .into_opaque_type()?;

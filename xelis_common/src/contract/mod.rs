@@ -13,7 +13,6 @@ use indexmap::IndexMap;
 use log::{debug, info};
 use xelis_builder::EnvironmentBuilder;
 use xelis_vm::{
-    Tid,
     Context,
     FnInstance,
     FnParams,
@@ -109,7 +108,7 @@ pub struct ContractEventTracker {
 }
 
 // Build the environment for the contract
-pub fn build_environment<'a, P: ContractProvider + Tid<'a>>() -> EnvironmentBuilder<'a> {
+pub fn build_environment<'a, 'ty, P: ContractProvider<'ty>>() -> EnvironmentBuilder<'a, 'ty> {
     debug!("Building environment for contract");
 
     let mut env = EnvironmentBuilder::default();
@@ -387,7 +386,7 @@ pub fn build_environment<'a, P: ContractProvider + Tid<'a>>() -> EnvironmentBuil
             "load",
             Some(memory_storage_type.clone()),
             vec![("key", Type::Any)],
-            memory_storage_load::<P>,
+            memory_storage_load,
             50,
             Some(Type::Optional(Box::new(Type::Any)))
         );
@@ -395,7 +394,7 @@ pub fn build_environment<'a, P: ContractProvider + Tid<'a>>() -> EnvironmentBuil
             "has",
             Some(memory_storage_type.clone()),
             vec![("key", Type::Any)],
-            memory_storage_has::<P>,
+            memory_storage_has,
             25,
             Some(Type::Bool)
         );
@@ -403,7 +402,7 @@ pub fn build_environment<'a, P: ContractProvider + Tid<'a>>() -> EnvironmentBuil
             "store",
             Some(memory_storage_type.clone()),
             vec![("key", Type::Any), ("value", Type::Any)],
-            memory_storage_store::<P>,
+            memory_storage_store,
             50,
             Some(Type::Optional(Box::new(Type::Any)))
         );
@@ -411,7 +410,7 @@ pub fn build_environment<'a, P: ContractProvider + Tid<'a>>() -> EnvironmentBuil
             "delete",
             Some(memory_storage_type.clone()),
             vec![("key", Type::Any)],
-            memory_storage_delete::<P>,
+            memory_storage_delete,
             50,
             Some(Type::Optional(Box::new(Type::Any)))
         );
@@ -911,14 +910,14 @@ pub fn build_environment<'a, P: ContractProvider + Tid<'a>>() -> EnvironmentBuil
     env
 }
 
-pub fn provider_from_context<'a, 'ty, P: ContractProvider + Tid<'ty>>(context: &'a mut Context<'ty, '_>) -> Result<&'a mut P, anyhow::Error> {
+pub fn provider_from_context<'a, 'ty, P: ContractProvider<'ty>>(context: &'a mut Context<'ty, '_>) -> Result<&'a mut P, anyhow::Error> {
     let data: &mut P = context.get_mut()
         .context("Provider not initialized")?;
 
     Ok(data)
 }
 
-pub fn from_context<'a, 'ty, P: Tid<'ty>>(context: &'a mut Context<'ty, '_>) -> Result<(&'a mut P, &'a mut ChainState<'ty>), anyhow::Error> {
+pub fn from_context<'a, 'ty, P: ContractProvider<'ty>>(context: &'a mut Context<'ty, '_>) -> Result<(&'a mut P, &'a mut ChainState<'ty>), anyhow::Error> {
     let mut datas = context.get_many_mut([&P::id(), &TypeId::of::<ChainState>()]);
 
     let provider: &mut P = datas[0]
@@ -938,7 +937,7 @@ pub fn from_context<'a, 'ty, P: Tid<'ty>>(context: &'a mut Context<'ty, '_>) -> 
 
 // Function helper to get the balance for the given asset
 // This will first check in our current changes, then in the previous execution cache
-pub fn get_balance_from_cache<'a, P: ContractProvider>(provider: &P, state: &'a mut ChainState, asset: Hash) -> Result<&'a mut Option<(VersionedState, u64)>, anyhow::Error> {
+pub fn get_balance_from_cache<'a, 'ty, P: ContractProvider<'ty>>(provider: &P, state: &'a mut ChainState, asset: Hash) -> Result<&'a mut Option<(VersionedState, u64)>, anyhow::Error> {
     Ok(match state.cache.balances.entry(asset.clone()) {
         Entry::Occupied(entry) => entry.into_mut(),
         Entry::Vacant(entry) => {
@@ -948,12 +947,12 @@ pub fn get_balance_from_cache<'a, P: ContractProvider>(provider: &P, state: &'a 
     })
 }
 
-pub fn get_balance_from_provider<P: ContractProvider>(provider: &P, topoheight: TopoHeight, contract: &Hash, asset: &Hash) -> Result<Option<(VersionedState, u64)>, anyhow::Error> {
+pub fn get_balance_from_provider<'ty, P: ContractProvider<'ty>>(provider: &P, topoheight: TopoHeight, contract: &Hash, asset: &Hash) -> Result<Option<(VersionedState, u64)>, anyhow::Error> {
     let balance = provider.get_contract_balance_for_asset(contract, asset, topoheight)?;
     Ok(balance.map(|(topoheight, balance)| (VersionedState::FetchedAt(topoheight), balance)))
 }
 
-pub fn get_optional_asset_from_cache<'a, P: ContractProvider>(provider: &P, state: &'a mut ChainState, asset: Hash) -> Result<&'a mut Option<AssetChanges>, anyhow::Error> {
+pub fn get_optional_asset_from_cache<'a, 'ty, P: ContractProvider<'ty>>(provider: &P, state: &'a mut ChainState, asset: Hash) -> Result<&'a mut Option<AssetChanges>, anyhow::Error> {
     Ok(match state.assets.entry(asset.clone()) {
         Entry::Occupied(entry) => entry.into_mut(),
         Entry::Vacant(entry) => {
@@ -977,13 +976,13 @@ pub fn get_asset_changes_for_hash_mut<'a>(state: &'a mut ChainState, hash: &'a H
         .context("Asset not found in cache")
 }
 
-pub fn get_asset_from_cache<'a, P: ContractProvider>(provider: &P, state: &'a mut ChainState, asset: Hash) -> Result<&'a mut AssetChanges, anyhow::Error> {
+pub fn get_asset_from_cache<'a, 'ty, P: ContractProvider<'ty>>(provider: &P, state: &'a mut ChainState, asset: Hash) -> Result<&'a mut AssetChanges, anyhow::Error> {
     get_optional_asset_from_cache(provider, state, asset)?
         .as_mut()
         .context("Asset not found for provided hash")
 }
 
-pub fn get_asset_from_provider<P: ContractProvider>(provider: &P, topoheight: TopoHeight, asset: &Hash) -> Result<Option<AssetChanges>, anyhow::Error> {
+pub fn get_asset_from_provider<'ty, P: ContractProvider<'ty>>(provider: &P, topoheight: TopoHeight, asset: &Hash) -> Result<Option<AssetChanges>, anyhow::Error> {
     match provider.load_asset_data(asset, topoheight)? {
         Some((topo, data)) => {
             let supply = provider.load_asset_supply(asset, topoheight)?
@@ -1057,7 +1056,7 @@ fn get_deposit_for_asset(_: FnInstance, params: FnParams, context: &mut Context)
     Ok(Some(value))
 }
 
-fn get_balance_for_asset<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+fn get_balance_for_asset<'ty, P: ContractProvider<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (provider, state) = from_context::<P>(context)?;
 
     let asset: Hash = params.remove(0)
@@ -1071,7 +1070,7 @@ fn get_balance_for_asset<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut
     Ok(Some(balance))
 }
 
-fn transfer<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+fn transfer<'ty, P: ContractProvider<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     debug!("Transfer called {:?}", params);
 
     let asset: Hash = params.remove(2)
@@ -1131,7 +1130,7 @@ fn transfer<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnPa
     Ok(Some(Primitive::Boolean(true).into()))
 }
 
-fn burn<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+fn burn<'ty, P: ContractProvider<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (provider, state) = from_context::<P>(context)?;
 
     let asset: Hash = params.remove(1)
@@ -1163,7 +1162,7 @@ fn burn<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams
     Ok(Some(Primitive::Boolean(true).into()))
 }
 
-fn get_account_balance_of<'ty, P: ContractProvider + Tid<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+fn get_account_balance_of<'ty, P: ContractProvider<'ty>>(_: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let (provider, state) = from_context::<P>(context)?;
 
     let asset: Hash = params.remove(1)
@@ -1204,7 +1203,7 @@ mod tests {
         Ok(None)
     }
 
-    fn build_env<'ty, F: Foo + 'ty>() -> EnvironmentBuilder<'ty> {
+    fn build_env<'a, 'ty, F: Foo + 'ty>() -> EnvironmentBuilder<'a, 'ty> {
         let mut env = EnvironmentBuilder::default();
         env.register_native_function(
             "bar",

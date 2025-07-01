@@ -33,7 +33,7 @@ use crate::{
 /// It is intended to represent a virtual snapshot of the current blockchain
 /// state, where the transactions can get applied in order.
 #[async_trait]
-pub trait BlockchainVerificationState<'a, E> {
+pub trait BlockchainVerificationState<'a, 'ty: 'a, E> {
     // This is giving a "implementation is not general enough"
     // We replace it by a generic type in the trait definition
     // See: https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=aaa6065daaab514e638b2333703765c7
@@ -98,7 +98,7 @@ pub trait BlockchainVerificationState<'a, E> {
     ) -> Result<Option<&MultiSigPayload>, E>;
 
     /// Get the environment
-    async fn get_environment(&mut self) -> Result<&Environment, E>;
+    async fn get_environment(&mut self) -> Result<&Environment<'a>, E>;
 
     /// Set the contract module
     async fn set_contract_module(
@@ -117,15 +117,15 @@ pub trait BlockchainVerificationState<'a, E> {
 
     /// Get the contract module with the environment
     /// This is used to verify that all parameters are correct
-    async fn get_contract_module_with_environment(
-        &self,
+    async fn get_contract_module_with_environment<'b>(
+        &'b self,
         hash: &'a Hash
-    ) -> Result<(&Module, &Environment), E>;
+    ) -> Result<(&'b Module, &'b Environment<'a>), E>;
 }
 
-pub struct ContractEnvironment<'a, P: ContractProvider> {
+pub struct ContractEnvironment<'a, 'ty, P: ContractProvider<'ty>> {
     // Environment with the embed stdlib
-    pub environment: &'a Environment,
+    pub environment: &'a Environment<'ty>,
     // Module to execute
     pub module: &'a Module,
     // Provider for the contract
@@ -133,7 +133,7 @@ pub struct ContractEnvironment<'a, P: ContractProvider> {
 }
 
 #[async_trait]
-pub trait BlockchainApplyState<'a, P: ContractProvider, E>: BlockchainVerificationState<'a, E> {
+pub trait BlockchainApplyState<'a, 'ty: 'a, P: ContractProvider<'ty>, E>: BlockchainVerificationState<'a, 'ty, E> {
     /// Add burned XELIS
     async fn add_burned_coins(&mut self, amount: u64) -> Result<(), E>;
 
@@ -164,7 +164,7 @@ pub trait BlockchainApplyState<'a, P: ContractProvider, E>: BlockchainVerificati
         contract: &'b Hash,
         deposits: &'b IndexMap<Hash, ContractDeposit>,
         tx_hash: &'b Hash
-    ) -> Result<(ContractEnvironment<'b, P>, ChainState<'b>), E>;
+    ) -> Result<(ContractEnvironment<'b, 'ty, P>, ChainState<'b>), E>;
 
     /// Merge the contract cache with the stored one
     async fn merge_contract_changes(

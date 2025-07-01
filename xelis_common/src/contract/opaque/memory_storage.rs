@@ -10,7 +10,7 @@ use xelis_vm::{
 };
 use crate::{
     config::FEE_PER_BYTE_IN_CONTRACT_MEMORY,
-    contract::{ChainState, ContractProvider},
+    contract::ChainState,
 };
 use super::{Serializer, MAX_KEY_SIZE, MAX_VALUE_SIZE};
 
@@ -26,7 +26,7 @@ pub fn memory_storage(_: FnInstance, _: FnParams, _: &mut Context) -> FnReturnTy
     Ok(Some(Primitive::Opaque(OpaqueWrapper::new(OpaqueMemoryStorage)).into()))
 }
 
-pub fn memory_storage_load<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+pub fn memory_storage_load(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
     let state: &mut ChainState = context.get_mut()
         .context("No chain state for memory storage")?;
 
@@ -40,7 +40,7 @@ pub fn memory_storage_load<P: ContractProvider>(_: FnInstance, mut params: FnPar
     Ok(Some(value))
 }
 
-pub fn memory_storage_has<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+pub fn memory_storage_has(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
     let state: &mut ChainState = context.get_mut()
         .context("No chain state for memory storage")?;
 
@@ -51,7 +51,7 @@ pub fn memory_storage_has<P: ContractProvider>(_: FnInstance, mut params: FnPara
     Ok(Some(Primitive::Boolean(contains).into()))
 }
 
-pub fn memory_storage_store<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+pub fn memory_storage_store(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
     let key = params.remove(0)
         .into_owned()?;
 
@@ -79,7 +79,7 @@ pub fn memory_storage_store<P: ContractProvider>(_: FnInstance, mut params: FnPa
     Ok(Some(value))
 }
 
-pub fn memory_storage_delete<P: ContractProvider>(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
+pub fn memory_storage_delete(_: FnInstance, mut params: FnParams, context: &mut Context) -> FnReturnType {
     let state: &mut ChainState = context.get_mut()
         .context("No chain state for memory storage")?;
 

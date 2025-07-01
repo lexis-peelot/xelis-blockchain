@@ -12,7 +12,7 @@ use xelis_vm::{ValueCell, VM};
 
 use crate::{
     config::{TX_GAS_BURN_PERCENT, XELIS_ASSET},
-    contract::{ContractOutput, ContractProvider, ContractProviderWrapper},
+    contract::{ContractOutput, ContractProvider},
     crypto::{elgamal::Ciphertext, Hash},
     tokio::block_in_place_safe,
     transaction::{ContractDeposit, Transaction}
@@ -29,7 +29,7 @@ pub enum InvokeContract {
 impl Transaction {
     // Load and check if a contract is available
     // This is needed in case a contract has been removed or wasn't deployed due to the constructor error
-    pub(super) async fn is_contract_available<'a, E, B: BlockchainVerificationState<'a, E>>(
+    pub(super) async fn is_contract_available<'a, 'ty: 'a, E, B: BlockchainVerificationState<'a, 'ty, E>>(
         &'a self,
         state: &mut B,
         contract: &'a Hash,
@@ -41,7 +41,7 @@ impl Transaction {
     // Invoke a contract from a transaction
     // Note that the contract must be already loaded by calling
     // `is_contract_available`
-    pub(super) async fn invoke_contract<'a, P: ContractProvider, E, B: BlockchainApplyState<'a, P, E>>(
+    pub(super) async fn invoke_contract<'a: 'r, 'ty: 'a, 'r, P: ContractProvider<'ty>, E, B: BlockchainApplyState<'a, 'ty, P, E>>(
         self: &'a Arc<Self>,
         tx_hash: &'a Hash,
         state: &mut B,
@@ -95,10 +95,10 @@ impl Transaction {
             // Note that the VM already include the environment in Context
             context.insert_ref(self);
             // insert the chain state separetly to avoid to give the S type
-            context.insert_mut(&mut chain_state);
+            // context.insert_ref(&chain_state);
             // insert the storage through our wrapper
             // so it can be easily mocked
-            context.insert(ContractProviderWrapper(contract_environment.provider));
+            context.insert_mut(contract_environment.provider);
     
             // We need to handle the result of the VM
             let res = vm.run();
@@ -168,7 +168,7 @@ impl Transaction {
         Ok(is_success)
     }
 
-    pub(super) async fn handle_gas<'a, P: ContractProvider, E, B: BlockchainApplyState<'a, P, E>>(
+    pub(super) async fn handle_gas<'a, 'ty: 'a, P: ContractProvider<'ty>, E, B: BlockchainApplyState<'a, 'ty, P, E>>(
         &'a self,
         state: &mut B,
         used_gas: u64,
@@ -203,7 +203,7 @@ impl Transaction {
     }
 
     // Refund the deposits made by the user to the contract
-    pub(super) async fn refund_deposits<'a, P: ContractProvider, E, B: BlockchainApplyState<'a, P, E>>(
+    pub(super) async fn refund_deposits<'a, 'ty: 'a, P: ContractProvider<'ty>, E, B: BlockchainApplyState<'a, 'ty, P, E>>(
         &'a self,
         state: &mut B,
         deposits: &'a IndexMap<Hash, ContractDeposit>,

@@ -8,7 +8,6 @@ use xelis_vm::{
     FnParams,
     FnReturnType,
     Primitive,
-    Tid,
 };
 use crate::{
     contract::{
@@ -51,7 +50,7 @@ impl Serializable for Asset {}
 impl JSONHelper for Asset {}
 
 // Maximum supply set for this asset
-pub fn asset_get_max_supply<P: ContractProvider>(zelf: FnInstance, _: FnParams, context: &mut Context) -> FnReturnType {
+pub fn asset_get_max_supply<'ty, P: ContractProvider<'ty>>(zelf: FnInstance, _: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let asset: &Asset = zelf?.as_opaque_type()?;
     let state: &ChainState = context.get()
         .context("Chain state not found")?;
@@ -64,7 +63,7 @@ pub fn asset_get_max_supply<P: ContractProvider>(zelf: FnInstance, _: FnParams, 
 }
 
 // Contract hash that created this asset
-pub fn asset_get_contract_hash<P: ContractProvider>(zelf: FnInstance, _: FnParams, context: &mut Context) -> FnReturnType {
+pub fn asset_get_contract_hash<'ty, P: ContractProvider<'ty>>(zelf: FnInstance, _: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let asset: &Asset = zelf?.as_opaque_type()?;
     let state: &ChainState = context.get()
         .context("Chain state not found")?;
@@ -78,7 +77,7 @@ pub fn asset_get_contract_hash<P: ContractProvider>(zelf: FnInstance, _: FnParam
 }
 
 // Contract hash that created this asset
-pub fn asset_get_contract_id<P: ContractProvider>(zelf: FnInstance, _: FnParams, context: &mut Context) -> FnReturnType {
+pub fn asset_get_contract_id<'ty, P: ContractProvider<'ty>>(zelf: FnInstance, _: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let asset: &Asset = zelf?.as_opaque_type()?;
     let state: &ChainState = context.get()
         .context("Chain state not found")?;
@@ -92,7 +91,7 @@ pub fn asset_get_contract_id<P: ContractProvider>(zelf: FnInstance, _: FnParams,
 }
 
 // Emitted supply for this asset
-pub fn asset_get_supply<'ty, P: ContractProvider + Tid<'ty>>(zelf: FnInstance, _: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+pub fn asset_get_supply<'ty, P: ContractProvider<'ty>>(zelf: FnInstance, _: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let asset: &Asset = zelf?.as_opaque_type()?;
     let (provider, state) = from_context::<P>(context)?;
 
@@ -149,7 +148,7 @@ pub fn asset_is_read_only(zelf: FnInstance, _: FnParams, context: &mut Context) 
     Ok(Some(Primitive::Boolean(read_only).into()))
 }
 
-pub fn asset_transfer_ownership<'ty, P: ContractProvider + Tid<'ty>>(zelf: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+pub fn asset_transfer_ownership<'ty, P: ContractProvider<'ty>>(zelf: FnInstance, mut params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let param: Hash = params.remove(0)
         .into_owned()?
         .into_opaque_type()?;
@@ -174,7 +173,7 @@ pub fn asset_transfer_ownership<'ty, P: ContractProvider + Tid<'ty>>(zelf: FnIns
     }.into()))
 }
 
-pub fn asset_mint<'ty, P: ContractProvider + Tid<'ty>>(zelf: FnInstance, params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
+pub fn asset_mint<'ty, P: ContractProvider<'ty>>(zelf: FnInstance, params: FnParams, context: &mut Context<'ty, '_>) -> FnReturnType {
     let asset: &mut Asset = zelf?.as_opaque_type_mut()?;
     let (provider, chain_state) = from_context::<P>(context)?;
 

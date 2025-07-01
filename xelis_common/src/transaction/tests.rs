@@ -685,7 +685,7 @@ async fn test_multisig() {
 }
 
 #[async_trait]
-impl<'a> BlockchainVerificationState<'a, ()> for ChainState<'a> {
+impl<'a, 'ty: 'a> BlockchainVerificationState<'a, 'ty, ()> for ChainState<'a> {
 
     /// Pre-verify the TX
     async fn pre_verify_tx<'b>(
@@ -781,10 +781,10 @@ impl<'a> BlockchainVerificationState<'a, ()> for ChainState<'a> {
         Ok(self.contracts.contains_key(hash))
     }
 
-    async fn get_contract_module_with_environment(
-        &self,
+    async fn get_contract_module_with_environment<'b>(
+        &'b self,
         contract: &'a Hash
-    ) -> Result<(&Module, &Environment<'a>), ()> {
+    ) -> Result<(&'b Module, &'b Environment<'a>), ()> {
         let module = self.contracts.get(contract).ok_or(())?;
         Ok((module, &self.env))
     }
