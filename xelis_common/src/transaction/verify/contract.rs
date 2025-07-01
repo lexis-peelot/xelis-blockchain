@@ -41,7 +41,7 @@ impl Transaction {
     // Invoke a contract from a transaction
     // Note that the contract must be already loaded by calling
     // `is_contract_available`
-    pub(super) async fn invoke_contract<'a: 'r, 'ty: 'a, 'r, P: ContractProvider<'ty>, E, B: BlockchainApplyState<'a, 'ty, P, E>>(
+    pub(super) async fn invoke_contract<'a, 'ty: 'a, P: ContractProvider<'ty>, E, B: BlockchainApplyState<'a, 'ty, P, E>>(
         self: &'a Arc<Self>,
         tx_hash: &'a Hash,
         state: &mut B,
