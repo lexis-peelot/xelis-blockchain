@@ -9,6 +9,7 @@ wallets/
 peerlist-*.json
 build/
 scripts/
+__pycache__/
 
 # ignore all profiling files
 flamegraph.svg

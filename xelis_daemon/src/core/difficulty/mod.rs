@@ -19,6 +19,7 @@ use super::hard_fork::get_block_time_target_for_version;
 
 mod v1;
 mod v2;
+mod v3;
 
 // Kalman filter with unsigned integers only
 // z: The observed value (latest hashrate calculated on current block time).
@@ -54,22 +55,29 @@ fn kalman_filter(z: VarUint, x_est_prev: VarUint, p_prev: VarUint, shift: u64, l
     (x_est_new, p_new)
 }
 
-// Calculate the required difficulty for the next block based on the solve time of the previous block
-// We are using a Kalman filter to estimate the hashrate and adjust the difficulty
-// This function will determine which algorithm to use based on the version
+// Calculate the required difficulty for versions that use a single solve-time
+// measurement. V6 uses DAG-aware hashrate measurements through
+// `calculate_difficulty_from_hashrate`.
 pub fn calculate_difficulty(solve_time: TimestampMillis, previous_difficulty: Difficulty, p: VarUint, minimum_difficulty: Difficulty, version: BlockVersion) -> (Difficulty, VarUint) {
     let block_time_target = get_block_time_target_for_version(version);
     match version {
         BlockVersion::V0 => v1::calculate_difficulty(solve_time, previous_difficulty, p, minimum_difficulty, block_time_target),
-        _ => v2::calculate_difficulty(solve_time, previous_difficulty, p, minimum_difficulty, block_time_target, version >= BlockVersion::V6),
+        _ if version >= BlockVersion::V6 => (previous_difficulty.max(minimum_difficulty), p),
+        _ => v2::calculate_difficulty(solve_time, previous_difficulty, p, minimum_difficulty, block_time_target, false),
     }
 }
 
-// Get the process noise covariance based on the version
-// It is used by first blocks on a new version
+pub fn calculate_difficulty_from_hashrate(observed_hashrate: VarUint, previous_difficulty: Difficulty, p: VarUint, minimum_difficulty: Difficulty, version: BlockVersion, measurement_count: u64) -> (Difficulty, VarUint) {
+    let block_time_target = get_block_time_target_for_version(version);
+    v3::calculate_difficulty(observed_hashrate, previous_difficulty, p, minimum_difficulty, block_time_target, measurement_count)
+}
+
+// Get the initial DAA state for a version. The `p` storage/API name is
+// historical: V1/V2 store covariance, while V3 stores packed filter state.
 pub fn get_covariance_p(version: BlockVersion) -> VarUint {
     match version {
         BlockVersion::V0 => v1::P,
+        BlockVersion::V6 => v3::P,
         _ => v2::P
     }
 }
