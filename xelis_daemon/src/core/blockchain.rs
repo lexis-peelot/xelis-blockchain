@@ -1006,17 +1006,20 @@ impl<S: Storage> Blockchain<S> {
         let minimum_difficulty = difficulty::get_minimum_difficulty(self.get_network(), version);
 
         let (difficulty, p_new) = if version >= BlockVersion::V6 {
-            let (base, _) = blockdag::find_common_base(provider, tips.clone(), version).await?;
-            let base_topo_height = provider.get_topo_height_for_hash(&base).await?;
-
-            let order = blockdag::generate_full_order::<_, _, IndexSet<Hash>>(provider, tips.clone().into_iter().cloned(), &base, base_topo_height).await?;
+            let (base, _) = blockdag::find_daa_common_base(provider, tips.clone(), height, version).await?;
+            let order = blockdag::generate_full_order_from_base::<_, _, IndexSet<Hash>>(provider, tips.clone().into_iter().cloned(), &base).await?;
             debug_assert_eq!(order.first(), Some(&base));
 
-            // A block stores the DAA state that was used to mine it. Start there,
+            // order[0] is the common base. order[1] is the first observed block,
+            // whose metadata stores the DAA state used to mine it. Start there,
             // then replay each observed block once to get the state for the next block.
             let state_block = order.get_index(1).ok_or(BlockchainError::NotEnoughBlocks)?;
             let state_difficulty = provider.get_difficulty_for_block_hash(state_block).await?;
-            let p = provider.get_estimated_covariance_for_block_hash(state_block).await?;
+            let state_version = provider.get_version_for_block_hash(state_block).await?;
+            let p = difficulty::normalize_daa_state_p(
+                state_version,
+                provider.get_estimated_covariance_for_block_hash(state_block).await?,
+            );
             let first_timestamp = provider.get_timestamp_for_block_hash(&base).await?;
             let mut newest_timestamp = first_timestamp;
             let mut observed_work = Difficulty::zero();
@@ -1025,9 +1028,7 @@ impl<S: Storage> Blockchain<S> {
             for hash in order.iter().skip(1) {
                 observed_work += provider.get_difficulty_for_block_hash(hash).await?;
                 let timestamp = provider.get_timestamp_for_block_hash(hash).await?;
-                if timestamp > newest_timestamp {
-                    newest_timestamp = timestamp;
-                }
+                newest_timestamp = newest_timestamp.max(timestamp);
             }
 
             let time_span = newest_timestamp
@@ -1035,7 +1036,7 @@ impl<S: Storage> Blockchain<S> {
                 .max(observed_count);
             let observed_hashrate = (observed_work * MILLIS_PER_SECOND / time_span).max(VarUint::one());
 
-            trace!("Calculated V6 observed hashrate {} from base {} (blocks: {}, work: {}, time: {}ms)", observed_hashrate, base, observed_count, observed_work, time_span);
+            trace!("Calculated V6 DAG observed hashrate {} from base {} (blocks: {}, work: {}, time: {}ms)", observed_hashrate, base, observed_count, observed_work, time_span);
 
             difficulty::calculate_difficulty_from_hashrate(observed_hashrate, state_difficulty, p, minimum_difficulty, version, observed_count)
         } else {

@@ -411,20 +411,12 @@ where
 // Check if all tips have a common base at or above stable height limit,
 // which means they have forked and merged again in the last STABLE_LIMIT blocks
 // This prevents too deep/big reorgs
-pub async fn find_common_base_at_or_above_stable_height<'a, P, I>(provider: &P, tips: I, block_height: u64, version: BlockVersion) -> Result<Option<(Hash, u64)>, BlockchainError>
+async fn find_common_dominator_at_or_above_height<'a, P, I>(provider: &P, tips: I, highest_tip_height: u64, min_height: u64, prefer_highest: bool) -> Result<Option<(Hash, u64)>, BlockchainError>
 where
     P: DifficultyProvider + ConcurrencyProvider,
     I: Iterator<Item = &'a Hash> + Send + Sync,
 {
-    let stable_limit = get_stable_limit(version);
-    // Because block height is calculated as max tip height + 1, the highest tip height is block_height - 1
-    let highest_tip_height = block_height.saturating_sub(1);
-    // min_height = highest_tip_height - stable_limit, if highest_tip_height >= stable_limit, otherwise 0
-    let min_height = highest_tip_height.saturating_sub(stable_limit);
-
-    // For each tip, collect ancestors reachable within the height window,
-    // and also record each block's parents (restricted to the window) for
-    // the bypass check.
+    // For each tip, collect ancestors reachable within the height window.
     let ancestor_sets = stream::iter(tips)
         .map(|tip| async move {
             let mut visited = HashSet::new();
@@ -454,8 +446,6 @@ where
         .try_collect::<Vec<_>>().await?;
 
     // Find all common ancestors above the search floor.
-    // Because the BFS never adds blocks at/below min_height to visited,
-    // every entry in the intersection is already above the floor.
     // If the intersection is empty, the dominator is at or below the floor.
     let (first, rest) = match ancestor_sets.split_first() {
         Some(pair) => pair,
@@ -465,33 +455,26 @@ where
     let mut common = Vec::new();
     for hash in first.iter().filter(|h| rest.iter().all(|s| s.contains(*h))) {
         let height = provider.get_height_for_block_hash(hash).await?;
-        if highest_tip_height.saturating_sub(height) < stable_limit {
+        if height >= min_height && height <= highest_tip_height {
             common.push((hash.clone(), height));
         }
     }
 
-    if common.is_empty() {
-        return Ok(None)
+    common.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+    if prefer_highest {
+        common.reverse();
     }
 
-    // Sort by height descending (we want the highest dominator)
-    common.sort_by(|a, b| b.1.cmp(&a.1));
-
-    // For each candidate (highest first), check if it is a true dominator:
-    // A candidate C at height h_c is a dominator if no tip can reach any block
-    // at height < h_c without going through C.
+    // Validation wants the highest dominator; DAA wants the oldest dominator
+    // in its measurement span. A candidate C is a dominator if no tip can reach
+    // any block below C without going through C.
     for (candidate_hash, candidate_height) in common {
         let mut is_dominator = true;
 
         'tip_check: for ancestor_set in ancestor_sets.iter() {
-            // BFS/DFS from all blocks in this tip's ancestor set that are
-            // the tip itself or above the candidate, skipping the candidate.
-            // If we can reach any block at height < candidate_height, it's not a dominator.
             let mut visited = HashSet::new();
             let mut stack = VecDeque::new();
 
-            // Start from the tip's ancestors that are strictly above the candidate
-            // (or the tips themselves)
             for hash in ancestor_set {
                 if *hash == candidate_hash {
                     continue;
@@ -535,6 +518,30 @@ where
     }
 
     Ok(None)
+}
+
+pub async fn find_common_base_at_or_above_stable_height<'a, P, I>(provider: &P, tips: I, block_height: u64, version: BlockVersion) -> Result<Option<(Hash, u64)>, BlockchainError>
+where
+    P: DifficultyProvider + ConcurrencyProvider,
+    I: Iterator<Item = &'a Hash> + Send + Sync,
+{
+    let highest_tip_height = block_height.saturating_sub(1);
+    let min_height = highest_tip_height.saturating_sub(get_stable_limit(version).saturating_sub(1));
+
+    find_common_dominator_at_or_above_height(provider, tips, highest_tip_height, min_height, true).await
+}
+
+pub async fn find_daa_common_base<'a, P, I>(provider: &P, tips: I, block_height: u64, version: BlockVersion) -> Result<(Hash, u64), BlockchainError>
+where
+    P: DifficultyProvider + ConcurrencyProvider,
+    I: Iterator<Item = &'a Hash> + Send + Sync,
+{
+    let highest_tip_height = block_height.saturating_sub(1);
+    let min_height = highest_tip_height.saturating_sub(get_stable_limit(version));
+
+    find_common_dominator_at_or_above_height(provider, tips, highest_tip_height, min_height, false)
+        .await?
+        .ok_or(BlockchainError::TipsCommonBaseTooFar)
 }
 
 // find the common base (block hash and block height) of all tips
@@ -985,6 +992,68 @@ where
     Ok(full_order)
 }
 
+pub async fn generate_full_order_from_base<P, I, S>(provider: &P, hashes: I, base: &Hash) -> Result<S, BlockchainError>
+where
+    P: DifficultyProvider,
+    I: Iterator<Item = Hash> + ExactSizeIterator,
+    S: OrderedSet<Hash> + Default
+{
+    trace!("generate full order from base {} with {} tips", base, hashes.len());
+    if hashes.len() == 0 {
+        return Err(BlockchainError::ExpectedTips)
+    }
+
+    let mut stack: VecDeque<_> = hashes.collect();
+    let mut blocks = HashMap::new();
+    let base_height = provider.get_height_for_block_hash(base).await?;
+    blocks.insert(
+        base.clone(),
+        (base_height, provider.get_cumulative_difficulty_for_block_hash(base).await?)
+    );
+
+    while let Some(hash) = stack.pop_back() {
+        if blocks.contains_key(&hash) {
+            continue;
+        }
+
+        let height = provider.get_height_for_block_hash(&hash).await?;
+        if height < base_height {
+            return Err(BlockchainError::NotEnoughBlocks)
+        }
+
+        blocks.insert(
+            hash.clone(),
+            (height, provider.get_cumulative_difficulty_for_block_hash(&hash).await?)
+        );
+
+        stack.extend(
+            provider.get_past_blocks_for_block_hash(&hash).await?
+                .iter()
+                .filter(|parent| !blocks.contains_key(*parent))
+                .cloned()
+        );
+    }
+
+    let mut ordered_blocks = blocks
+        .into_iter()
+        .filter(|(hash, _)| hash != base)
+        .collect::<Vec<_>>();
+    ordered_blocks.sort_by(|(a_hash, (a_height, a_work)), (b_hash, (b_height, b_work))| {
+        a_height
+            .cmp(b_height)
+            .then_with(|| b_work.cmp(a_work))
+            .then_with(|| b_hash.cmp(a_hash))
+    });
+
+    let mut full_order = S::default();
+    full_order.insert(base.clone());
+    for (hash, _) in ordered_blocks {
+        full_order.insert(hash);
+    }
+
+    Ok(full_order)
+}
+
 // confirms whether the actual tip difficulty is within 9% deviation with best tip (reference)
 pub async fn validate_tips<P: DifficultyProvider>(provider: &P, best_tip: &Hash, tip: &Hash) -> Result<bool, BlockchainError> {
     const MAX_DEVIATION: Difficulty = Difficulty::from_u64(91);
@@ -1159,6 +1228,98 @@ mod tests {
             .unwrap();
         assert_eq!(*tip, b);
         assert_eq!(ts, 120);
+    }
+
+    async fn build_daa_order_test_storage(b_topo: u64, c_topo: u64) -> MemoryStorage {
+        let mut storage = MemoryStorage::new(Network::Devnet, 1);
+        let g = h(10);
+        let a = h(11);
+        let b = h(12);
+        let c = h(13);
+
+        add_block(&mut storage, g.clone(), 0, 0, vec![], 1, 1, BlockVersion::V6, Some(0)).await;
+        add_block(&mut storage, a.clone(), 1, 1, vec![g.clone()], 2, 2, BlockVersion::V6, Some(1)).await;
+        add_block(&mut storage, b, 2, 2, vec![a.clone()], 3, 3, BlockVersion::V6, Some(b_topo)).await;
+        add_block(&mut storage, c, 2, 3, vec![a], 5, 5, BlockVersion::V6, Some(c_topo)).await;
+
+        storage
+    }
+
+    async fn calculate_v6_daa_for_test(storage: &MemoryStorage, tips: Vec<Hash>) -> (Difficulty, VarUint) {
+        use crate::core::storage::DifficultyProvider as _;
+
+        let height = calculate_height_at_tips(storage, tips.iter()).await.unwrap();
+        let (base, _) = find_daa_common_base(storage, tips.iter(), height, BlockVersion::V6).await.unwrap();
+        let order = daa_order(storage, tips.into_iter(), &base).await;
+
+        let state_block = order.get(1).unwrap();
+        let state_difficulty = storage.get_difficulty_for_block_hash(state_block).await.unwrap();
+        let state_version = storage.get_version_for_block_hash(state_block).await.unwrap();
+        let p = crate::core::difficulty::normalize_daa_state_p(
+            state_version,
+            storage.get_estimated_covariance_for_block_hash(state_block).await.unwrap(),
+        );
+
+        let first_timestamp = storage.get_timestamp_for_block_hash(&base).await.unwrap();
+        let mut newest_timestamp = first_timestamp;
+        let mut observed_work = Difficulty::zero();
+        let observed_count = (order.len() - 1) as u64;
+
+        for hash in order.iter().skip(1) {
+            observed_work += storage.get_difficulty_for_block_hash(hash).await.unwrap();
+            let timestamp = storage.get_timestamp_for_block_hash(hash).await.unwrap();
+            newest_timestamp = newest_timestamp.max(timestamp);
+        }
+
+        let time_span = newest_timestamp
+            .saturating_sub(first_timestamp)
+            .max(observed_count);
+        let observed_hashrate = (observed_work * crate::config::MILLIS_PER_SECOND / time_span).max(VarUint::one());
+
+        crate::core::difficulty::calculate_difficulty_from_hashrate(
+            observed_hashrate,
+            state_difficulty,
+            p,
+            Difficulty::one(),
+            BlockVersion::V6,
+            observed_count,
+        )
+    }
+
+    async fn daa_order<I>(storage: &MemoryStorage, tips: I, base: &Hash) -> Vec<Hash>
+    where
+        I: Iterator<Item = Hash> + ExactSizeIterator
+    {
+        generate_full_order_from_base::<_, _, IndexSet<Hash>>(storage, tips, base)
+            .await
+            .unwrap()
+            .into_iter()
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn test_daa_order_and_difficulty_ignore_unstable_topo_order() {
+        let left = build_daa_order_test_storage(2, 3).await;
+        let right = build_daa_order_test_storage(3, 2).await;
+        let tips = vec![h(12), h(13)];
+
+        let left_base = find_daa_common_base(&left, tips.iter(), 3, BlockVersion::V6).await.unwrap();
+        let right_base = find_daa_common_base(&right, tips.iter(), 3, BlockVersion::V6).await.unwrap();
+        assert_eq!(left_base, right_base);
+
+        let left_order = daa_order(&left, tips.clone().into_iter(), &left_base.0).await;
+        let right_order = daa_order(&right, tips.clone().into_iter().rev(), &right_base.0).await;
+        let reversed_order = daa_order(&left, tips.clone().into_iter().rev(), &left_base.0).await;
+
+        assert_eq!(left_order, right_order);
+        assert_eq!(left_order, reversed_order);
+        assert_eq!(left_order, vec![h(10), h(11), h(13), h(12)]);
+
+        let left_daa = calculate_v6_daa_for_test(&left, tips.clone()).await;
+        let right_daa = calculate_v6_daa_for_test(&right, tips.clone()).await;
+        let reversed_daa = calculate_v6_daa_for_test(&left, tips.into_iter().rev().collect()).await;
+        assert_eq!(left_daa, right_daa);
+        assert_eq!(left_daa, reversed_daa);
     }
 
     #[tokio::test]

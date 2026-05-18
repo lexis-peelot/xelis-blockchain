@@ -82,6 +82,12 @@ pub fn get_covariance_p(version: BlockVersion) -> VarUint {
     }
 }
 
+// Normalize the state stored in the historical `p` slot before V6 replay.
+// Blocks before V6 store Kalman covariance there, not Gamma filter state.
+pub fn normalize_daa_state_p(version: BlockVersion, p: VarUint) -> VarUint {
+    if version >= BlockVersion::V6 { p } else { v3::P }
+}
+
 // Get the difficulty based on the hashrate and block time target
 // NOTE: The caller must ensure that the block time provided is in milliseconds
 pub const fn get_difficulty_with_target(hashrate: u64, block_time_target: u64) -> Difficulty {
@@ -135,6 +141,14 @@ mod tests {
         for version in [BlockVersion::V0, BlockVersion::V1, BlockVersion::V2, BlockVersion::V3] {
             assert!(get_difficulty_at_hard_fork(&Network::Testnet, version).is_none());
         }
+    }
+
+    #[test]
+    fn test_daa_state_p_resets_before_v6() {
+        let old_p = VarUint::from_u64(12345);
+
+        assert_eq!(normalize_daa_state_p(BlockVersion::V5, old_p), v3::P);
+        assert_eq!(normalize_daa_state_p(BlockVersion::V6, old_p), old_p);
     }
 
     #[test]
